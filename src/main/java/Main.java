@@ -45,11 +45,8 @@ public class Main {
 
         DataStream<String> sentences;
 
-        try {
-            sentences = env.socketTextStream("172.17.42.1", 9999);
-        } catch (Exception e) {
-            sentences = env.addSource(new SentenceSource());
-        }
+        // sentences = env.addSource(new SentenceSource());
+        sentences = env.socketTextStream("172.17.42.1", 9999);
 
         DataStream<Tuple2<String, Integer>> dataStream = sentences
                 .flatMap(new Splitter())
