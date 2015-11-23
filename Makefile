@@ -1,5 +1,5 @@
 TEST_IMG=debs15-flink-test
-MAIN_CLASS=Main
+MAIN_CLASS=it.affo.phd.debs15.flink.Main
 OPTS=
 
 build_run: clean
