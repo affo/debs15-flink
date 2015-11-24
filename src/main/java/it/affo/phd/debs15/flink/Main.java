@@ -47,19 +47,21 @@ public class Main {
         });
 
         // PROFIT
-        DataStream<Tuple2<TaxiRide, Double>> profit = rides.assignTimestamps(
-                new AscendingTimestampExtractor<TaxiRide>() {
-                    @Override
-                    public long extractAscendingTimestamp(TaxiRide element, long currentTimestamp) {
-                        return element.dropoffTS.getTime();
-                    }
-                })
-                .keyBy(new KeySelector<TaxiRide, String>() {
-                    @Override
-                    public String getKey(TaxiRide value) throws Exception {
-                        return value.dropoffCell;
-                    }
-                })
+        DataStream<Tuple2<TaxiRide, Double>> profit = rides
+                .assignTimestamps(
+                        new AscendingTimestampExtractor<TaxiRide>() {
+                            @Override
+                            public long extractAscendingTimestamp(TaxiRide element, long currentTimestamp) {
+                                return element.dropoffTS.getTime();
+                            }
+                        })
+                .keyBy(
+                        new KeySelector<TaxiRide, String>() {
+                            @Override
+                            public String getKey(TaxiRide value) throws Exception {
+                                return value.dropoffCell;
+                            }
+                        })
                 .timeWindow(
                         Time.of(PROFIT_WINDOW_IN_MINUTES, TimeUnit.MINUTES),
                         Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
@@ -91,6 +93,57 @@ public class Main {
                                 out.collect(new Tuple2<>(trigger, res));
                             }
                         });
+
+        // EMPTY TAXIS
+        DataStream<Tuple2<TaxiRide, Integer>> emptyTaxis = rides
+                .assignTimestamps(
+                        new AscendingTimestampExtractor<TaxiRide>() {
+                            @Override
+                            public long extractAscendingTimestamp(TaxiRide element, long currentTimestamp) {
+                                return element.dropoffTS.getTime();
+                            }
+                        })
+                .keyBy(
+                        new KeySelector<TaxiRide, String>() {
+                            @Override
+                            public String getKey(TaxiRide value) throws Exception {
+                                return value.taxiID;
+                            }
+                        })
+                .timeWindow(
+                        Time.of(EMPTY_TAXIS_WINDOW_IN_MINUTES, TimeUnit.MINUTES),
+                        Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
+                )
+                .apply(
+                        new WindowFunction<TaxiRide, Tuple2<TaxiRide, Integer>, String, TimeWindow>() {
+                            @Override
+                            public void apply(
+                                    String s,
+                                    TimeWindow window,
+                                    Iterable<TaxiRide> values,
+                                    Collector<Tuple2<TaxiRide, Integer>> out) throws Exception {
+                                TaxiRide lastone = null;
+                                for (TaxiRide tr : values) {
+                                    lastone = tr;
+                                }
+
+                                out.collect(new Tuple2<>(lastone, 1));
+                            }
+                        })
+                .keyBy(
+                        new KeySelector<Tuple2<TaxiRide, Integer>, String>() {
+                            @Override
+                            public String getKey(Tuple2<TaxiRide, Integer> value) throws Exception {
+                                return value.f0.dropoffCell;
+                            }
+                        })
+                .timeWindow(
+                        Time.of(EMPTY_TAXIS_WINDOW_IN_MINUTES, TimeUnit.MINUTES),
+                        Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
+                )
+                .sum(1);
+
+        emptyTaxis.print();
 
         env.execute("DEBS 2015 - Profitability");
     }
