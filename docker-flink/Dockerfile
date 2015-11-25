@@ -1,4 +1,4 @@
-FROM maven:3.3.3-jdk-8
+FROM maven:3.3.3-jdk-7
 
 RUN mkdir /opt/flink
 RUN git clone https://github.com/apache/flink.git /opt/flink
