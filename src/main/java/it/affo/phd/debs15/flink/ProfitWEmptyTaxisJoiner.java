@@ -22,7 +22,7 @@ public class ProfitWEmptyTaxisJoiner implements
         if (second.f1 == 0) {
             return;
         }
-        
+
         double profitability = first.f1 / second.f1;
         TaxiRide trigger = first.f0.dropoffTS.getTime() > second.f0.dropoffTS.getTime() ?
                 first.f0 : second.f0;
