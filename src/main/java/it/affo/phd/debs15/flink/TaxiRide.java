@@ -87,4 +87,13 @@ public class TaxiRide {
                 ",\n\ttip = " + tip +
                 "\n}\n";
     }
+
+    @Override
+    public int hashCode() {
+        int result = pickupTS != null ? pickupTS.hashCode() : 0;
+        result = 31 * result + (dropoffTS != null ? dropoffTS.hashCode() : 0);
+        result = 31 * result + (pickupCell != null ? pickupCell.hashCode() : 0);
+        result = 31 * result + (dropoffCell != null ? dropoffCell.hashCode() : 0);
+        return result;
+    }
 }

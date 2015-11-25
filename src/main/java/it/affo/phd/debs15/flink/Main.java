@@ -9,6 +9,7 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.AscendingTimestampExtractor;
 import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
@@ -25,6 +26,7 @@ public class Main {
     private static final long WINDOW_GRANULARITY_IN_SECONDS = 60;
     private static final long PROFIT_WINDOW_IN_MINUTES = 15;
     private static final long EMPTY_TAXIS_WINDOW_IN_MINUTES = 30;
+    private static final long PROFITABILITY_WINDOW_IN_MINUTES = 15;
 
     public static void main(String[] args) throws Exception {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -143,7 +145,18 @@ public class Main {
                 )
                 .sum(1);
 
-        emptyTaxis.print();
+        // PROFITABILITY
+        DataStream<Tuple2<TaxiRide, Double>> profitability = profit
+                .join(emptyTaxis)
+                .where(new ProfitWEmptyTaxisJoiner.JoinKey<Double>())
+                .equalTo(new ProfitWEmptyTaxisJoiner.JoinKey<Integer>())
+                .window(
+                        TumblingTimeWindows.of(
+                                Time.of(PROFITABILITY_WINDOW_IN_MINUTES, TimeUnit.MINUTES)
+                        )
+                ).apply(new ProfitWEmptyTaxisJoiner(), profit.getType());
+
+        profitability.print();
 
         env.execute("DEBS 2015 - Profitability");
     }
