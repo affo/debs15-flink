@@ -9,6 +9,7 @@ build_run: clean
 	sleep 2
 	docker build -t $(TEST_IMG) .
 	docker run -it -p 48081:8081 --name debs15-running $(TEST_IMG) -c$(MAIN_CLASS) $(OPTS)
+	docker cp debs15-running:/output.data .
 
 clean:
 	docker rm -f debs15-running; true
