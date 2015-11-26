@@ -2,10 +2,14 @@ package it.affo.phd.debs15.flink;
 
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.io.TextOutputFormat;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.core.fs.Path;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.sink.FileSinkFunctionByMillis;
+import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.util.Collector;
@@ -20,6 +24,10 @@ public class Main {
     private static final long PROFIT_WINDOW_IN_MINUTES = 15;
     private static final long EMPTY_TAXIS_WINDOW_IN_MINUTES = 30;
     private static final long PROFITABILITY_WINDOW_IN_MINUTES = 15;
+    private static final long RATIO_INTERVAL_IN_SECONDS = 10;
+    private static final int TOP_N = 10;
+    public static final String INPUT_FILE_PATH = "file:///input_data.csv";
+    public static final String OUTPUT_FILE_PATH = "file:///output.data";
 
     public static void main(String[] args) throws Exception {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -29,7 +37,7 @@ public class Main {
         env.getConfig().enableTimestamps();
         env.getConfig().setAutoWatermarkInterval(1000);
 
-        DataStream<String> lines = env.readTextFile("file:///input_data.csv");
+        DataStream<String> lines = env.readTextFile(INPUT_FILE_PATH);
 
         DataStream<TaxiRide> rides = lines.flatMap(new FlatMapFunction<String, TaxiRide>() {
             @Override
@@ -94,12 +102,20 @@ public class Main {
                 .equalTo(new ProfitWEmptyTaxisJoiner.JoinKey<Integer>())
                 .window(
                         TumblingTimeWindows.of(
-                                Time.of(PROFITABILITY_WINDOW_IN_MINUTES, TimeUnit.MINUTES)
+                                Time.of(RATIO_INTERVAL_IN_SECONDS, TimeUnit.MINUTES)
                         )
-                ).apply(new ProfitWEmptyTaxisJoiner(), profit.getType());
+                )
+                .apply(new ProfitWEmptyTaxisJoiner(), profit.getType());
 
-        
-        profitability.print();
+
+        // RANKING
+        RankingSink rs = new RankingSink(TOP_N);
+        rs.addOutput(new PrintSinkFunction<RankingSink.Ranking>());
+        rs.addOutput(
+                new FileSinkFunctionByMillis<>(
+                        new TextOutputFormat<RankingSink.Ranking>(new Path(OUTPUT_FILE_PATH)), 0L)
+        );
+        profitability.global().addSink(rs).setParallelism(1);
 
         env.execute("DEBS 2015 - Profitability");
     }
