@@ -3,4 +3,4 @@
 *.iml
 *.class
 build
-rankings.output
+output.data
