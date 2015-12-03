@@ -24,7 +24,7 @@ public class Main {
     private static final long PROFIT_WINDOW_IN_MINUTES = 15;
     private static final long EMPTY_TAXIS_WINDOW_IN_MINUTES = 30;
     private static final long PROFITABILITY_WINDOW_IN_MINUTES = 15;
-    private static final long RATIO_INTERVAL_IN_SECONDS = 10;
+    private static final long RATIO_INTERVAL_IN_SECONDS = 1;
     private static final int TOP_N = 10;
     public static final String INPUT_FILE_PATH = "file:///input_data.csv";
     public static final String OUTPUT_FILE_PATH = "file:///output.data";
@@ -47,11 +47,10 @@ public class Main {
                     out.collect(tr);
                 }
             }
-        });
+        }).assignTimestamps(new DropoffTimestamp());
 
         // PROFIT
         DataStream<Tuple2<TaxiRide, Double>> profit = rides
-                .assignTimestamps(new DropoffTimestamp())
                 .keyBy(
                         new KeySelector<TaxiRide, String>() {
                             @Override
@@ -68,7 +67,6 @@ public class Main {
 
         // EMPTY TAXIS
         DataStream<Tuple2<TaxiRide, Integer>> emptyTaxis = rides
-                .assignTimestamps(new DropoffTimestamp())
                 .keyBy(
                         new KeySelector<TaxiRide, String>() {
                             @Override
@@ -93,8 +91,7 @@ public class Main {
                         Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
                 )
                 .sum(1);
-
-
+        
         // PROFITABILITY
         DataStream<Tuple2<TaxiRide, Double>> profitability = profit
                 .join(emptyTaxis)
