@@ -99,7 +99,7 @@ public class Main {
                 .equalTo(new ProfitWEmptyTaxisJoiner.JoinKey<Integer>())
                 .window(
                         TumblingTimeWindows.of(
-                                Time.of(RATIO_INTERVAL_IN_SECONDS, TimeUnit.MINUTES)
+                                Time.of(RATIO_INTERVAL_IN_SECONDS, TimeUnit.SECONDS)
                         )
                 )
                 .apply(new ProfitWEmptyTaxisJoiner(), profit.getType());
