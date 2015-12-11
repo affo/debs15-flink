@@ -23,21 +23,20 @@ public class Main {
     private static final long WINDOW_GRANULARITY_IN_SECONDS = 60;
     private static final long PROFIT_WINDOW_IN_MINUTES = 15;
     private static final long EMPTY_TAXIS_WINDOW_IN_MINUTES = 30;
-    private static final long PROFITABILITY_WINDOW_IN_MINUTES = 15;
     private static final long RATIO_INTERVAL_IN_SECONDS = 1;
     private static final int TOP_N = 10;
     public static final String INPUT_FILE_PATH = "file:///input_data.csv";
     public static final String OUTPUT_FILE_PATH = "file:///output.data";
 
+    @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         // setting things up to enable EventTime
         env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
         env.getConfig().enableTimestamps();
-        env.getConfig().setAutoWatermarkInterval(1000);
 
-        DataStream<String> lines = env.readTextFile(INPUT_FILE_PATH);
+        DataStream<String> lines = env.readTextFile(INPUT_FILE_PATH).setParallelism(1);
 
         DataStream<TaxiRide> rides = lines.flatMap(new FlatMapFunction<String, TaxiRide>() {
             @Override
@@ -47,7 +46,8 @@ public class Main {
                     out.collect(tr);
                 }
             }
-        }).assignTimestamps(new DropoffTimestamp());
+        }).assignTimestamps(new DropoffTS.forTaxiRide());
+
 
         // PROFIT
         DataStream<Tuple2<TaxiRide, Double>> profit = rides
@@ -62,8 +62,8 @@ public class Main {
                         Time.of(PROFIT_WINDOW_IN_MINUTES, TimeUnit.MINUTES),
                         Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
                 )
-                .apply(new ProfitFunction());
-
+                .apply(new ProfitFunction())
+                .assignTimestamps(new DropoffTS.forTupleofTaxiRide());
 
         // EMPTY TAXIS
         DataStream<Tuple2<TaxiRide, Integer>> emptyTaxis = rides
@@ -79,6 +79,7 @@ public class Main {
                         Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
                 )
                 .apply(new EmptyTaxiFunction())
+                .assignTimestamps(new DropoffTS.forTupleofTaxiRide())
                 .keyBy(
                         new KeySelector<Tuple2<TaxiRide, Integer>, String>() {
                             @Override
@@ -90,8 +91,10 @@ public class Main {
                         Time.of(EMPTY_TAXIS_WINDOW_IN_MINUTES, TimeUnit.MINUTES),
                         Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
                 )
-                .sum(1);
-        
+                .sum(1)
+                .assignTimestamps(new DropoffTS.forTupleofTaxiRide());
+
+
         // PROFITABILITY
         DataStream<Tuple2<TaxiRide, Double>> profitability = profit
                 .join(emptyTaxis)
@@ -102,7 +105,8 @@ public class Main {
                                 Time.of(RATIO_INTERVAL_IN_SECONDS, TimeUnit.SECONDS)
                         )
                 )
-                .apply(new ProfitWEmptyTaxisJoiner(), profit.getType());
+                .apply(new ProfitWEmptyTaxisJoiner(), profit.getType())
+                .assignTimestamps(new DropoffTS.forTupleofTaxiRide());
 
 
         // RANKING
