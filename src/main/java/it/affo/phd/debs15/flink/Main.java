@@ -10,7 +10,7 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.FileSinkFunctionByMillis;
 import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
@@ -23,7 +23,7 @@ public class Main {
     private static final long WINDOW_GRANULARITY_IN_SECONDS = 60;
     private static final long PROFIT_WINDOW_IN_MINUTES = 15;
     private static final long EMPTY_TAXIS_WINDOW_IN_MINUTES = 30;
-    private static final long RATIO_INTERVAL_IN_SECONDS = 1;
+    private static final long RATIO_INTERVAL_IN_SECONDS = 15 * 60;
     private static final int TOP_N = 10;
     public static final String INPUT_FILE_PATH = "file:///input_data.csv";
     public static final String OUTPUT_FILE_PATH = "file:///output.data";
@@ -55,7 +55,7 @@ public class Main {
                         new KeySelector<TaxiRide, String>() {
                             @Override
                             public String getKey(TaxiRide value) throws Exception {
-                                return value.dropoffCell;
+                                return value.pickupCell;
                             }
                         })
                 .timeWindow(
@@ -98,11 +98,12 @@ public class Main {
         // PROFITABILITY
         DataStream<Tuple2<TaxiRide, Double>> profitability = profit
                 .join(emptyTaxis)
-                .where(new ProfitWEmptyTaxisJoiner.JoinKey<Double>())
-                .equalTo(new ProfitWEmptyTaxisJoiner.JoinKey<Integer>())
+                .where(new ProfitWEmptyTaxisJoiner.ProfitJoinKey())
+                .equalTo(new ProfitWEmptyTaxisJoiner.EmptyTaxisJoinKey())
                 .window(
-                        TumblingTimeWindows.of(
-                                Time.of(RATIO_INTERVAL_IN_SECONDS, TimeUnit.SECONDS)
+                        SlidingTimeWindows.of(
+                                Time.of(RATIO_INTERVAL_IN_SECONDS, TimeUnit.SECONDS),
+                                Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
                         )
                 )
                 .apply(new ProfitWEmptyTaxisJoiner(), profit.getType())

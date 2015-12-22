@@ -24,16 +24,33 @@ public class ProfitWEmptyTaxisJoiner implements
         }
 
         double profitability = first.f1 / second.f1;
-        TaxiRide trigger = first.f0.dropoffTS.getTime() > second.f0.dropoffTS.getTime() ?
-                first.f0 : second.f0;
+
+        //TaxiRide trigger = first.f0.dropoffTS.getTime() > second.f0.dropoffTS.getTime() ?
+        //      first.f0 : second.f0;
+        
+        // We decide that the trigger is always the second one.
+        // This will impact the cell output in rankings
+        TaxiRide trigger = second.f0;
         out.collect(new Tuple2<>(trigger, profitability));
     }
 
-    public static class JoinKey<T> implements KeySelector<Tuple2<TaxiRide, T>, Integer> {
+    public static class ProfitJoinKey implements KeySelector<Tuple2<TaxiRide, Double>, String> {
         @Override
-        public Integer getKey(Tuple2<TaxiRide, T> value) throws Exception {
+        public String getKey(Tuple2<TaxiRide, Double> value) throws Exception {
             TaxiRide tr = value.f0;
-            return tr.hashCode();
+            return tr.pickupTS.toString() +
+                    tr.dropoffTS.toString() +
+                    tr.pickupCell;
+        }
+    }
+
+    public static class EmptyTaxisJoinKey implements KeySelector<Tuple2<TaxiRide, Integer>, String> {
+        @Override
+        public String getKey(Tuple2<TaxiRide, Integer> value) throws Exception {
+            TaxiRide tr = value.f0;
+            return tr.pickupTS.toString() +
+                    tr.dropoffTS.toString() +
+                    tr.dropoffCell;
         }
     }
 }
