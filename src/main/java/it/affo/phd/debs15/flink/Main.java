@@ -10,8 +10,10 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.FileSinkFunctionByMillis;
 import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
-import org.apache.flink.streaming.api.windowing.assigners.SlidingTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.GlobalWindows;
+import org.apache.flink.streaming.api.windowing.evictors.CountEvictor;
 import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.triggers.CountTrigger;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +25,6 @@ public class Main {
     private static final long WINDOW_GRANULARITY_IN_SECONDS = 60;
     private static final long PROFIT_WINDOW_IN_MINUTES = 15;
     private static final long EMPTY_TAXIS_WINDOW_IN_MINUTES = 30;
-    private static final long RATIO_INTERVAL_IN_SECONDS = 15 * 60;
     private static final int TOP_N = 10;
     public static final String INPUT_FILE_PATH = "file:///input_data.csv";
     public static final String OUTPUT_FILE_PATH = "file:///output.data";
@@ -91,21 +92,17 @@ public class Main {
                         Time.of(EMPTY_TAXIS_WINDOW_IN_MINUTES, TimeUnit.MINUTES),
                         Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
                 )
-                .sum(1)
+                .apply(new EmptyTaxisCounter())
                 .assignTimestamps(new DropoffTS.forTupleofTaxiRide());
-
 
         // PROFITABILITY
         DataStream<Tuple2<TaxiRide, Double>> profitability = profit
                 .join(emptyTaxis)
                 .where(new ProfitWEmptyTaxisJoiner.ProfitJoinKey())
                 .equalTo(new ProfitWEmptyTaxisJoiner.EmptyTaxisJoinKey())
-                .window(
-                        SlidingTimeWindows.of(
-                                Time.of(RATIO_INTERVAL_IN_SECONDS, TimeUnit.SECONDS),
-                                Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
-                        )
-                )
+                .window(GlobalWindows.create())
+                .trigger(CountTrigger.of(2))
+                .evictor(CountEvictor.of(2))
                 .apply(new ProfitWEmptyTaxisJoiner(), profit.getType())
                 .assignTimestamps(new DropoffTS.forTupleofTaxiRide());
 

@@ -27,7 +27,7 @@ public class ProfitWEmptyTaxisJoiner implements
 
         //TaxiRide trigger = first.f0.dropoffTS.getTime() > second.f0.dropoffTS.getTime() ?
         //      first.f0 : second.f0;
-        
+
         // We decide that the trigger is always the second one.
         // This will impact the cell output in rankings
         TaxiRide trigger = second.f0;
@@ -38,9 +38,7 @@ public class ProfitWEmptyTaxisJoiner implements
         @Override
         public String getKey(Tuple2<TaxiRide, Double> value) throws Exception {
             TaxiRide tr = value.f0;
-            return tr.pickupTS.toString() +
-                    tr.dropoffTS.toString() +
-                    tr.pickupCell;
+            return tr.pickupCell;
         }
     }
 
@@ -48,9 +46,7 @@ public class ProfitWEmptyTaxisJoiner implements
         @Override
         public String getKey(Tuple2<TaxiRide, Integer> value) throws Exception {
             TaxiRide tr = value.f0;
-            return tr.pickupTS.toString() +
-                    tr.dropoffTS.toString() +
-                    tr.dropoffCell;
+            return tr.dropoffCell;
         }
     }
 }

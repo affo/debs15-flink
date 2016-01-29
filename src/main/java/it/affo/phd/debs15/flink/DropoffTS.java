@@ -7,23 +7,25 @@ import org.apache.flink.streaming.api.functions.TimestampExtractor;
  * Created by affo on 12/11/15.
  */
 public abstract class DropoffTS<E> implements TimestampExtractor<E> {
-    private long ts, wm;
+    private long lastTS;
 
     @Override
     public long extractTimestamp(E element, long currentTimestamp) {
-        ts = getDropoffTS(element, currentTimestamp);
+        long ts = getDropoffTS(element, currentTimestamp);
+        lastTS = Math.max(lastTS, ts);
         return ts;
     }
 
     @Override
     public long extractWatermark(E element, long currentTimestamp) {
-        wm = getDropoffTS(element, currentTimestamp) + 1000L;
-        return wm;
+        // let Flink decide when to emit watermarks
+        return Long.MIN_VALUE;
     }
 
     @Override
     public long getCurrentWatermark() {
-        return wm;
+        long oneMinute = 1000 * 60;
+        return lastTS - oneMinute;
     }
 
     protected abstract long getDropoffTS(E element, long currentTimestamp);
