@@ -3,17 +3,16 @@ package it.affo.phd.debs15.flink;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.io.TextOutputFormat;
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.AscendingTimestampExtractor;
 import org.apache.flink.streaming.api.functions.sink.FileSinkFunctionByMillis;
 import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
-import org.apache.flink.streaming.api.windowing.assigners.GlobalWindows;
-import org.apache.flink.streaming.api.windowing.evictors.CountEvictor;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
-import org.apache.flink.streaming.api.windowing.triggers.CountTrigger;
 import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,11 +46,16 @@ public class Main {
                     out.collect(tr);
                 }
             }
-        }).assignTimestamps(new DropoffTS.forTaxiRide());
+        }).assignTimestamps(new AscendingTimestampExtractor<TaxiRide>() {
+            @Override
+            public long extractAscendingTimestamp(TaxiRide element, long currentTimestamp) {
+                return element.dropoffTS.getTime();
+            }
+        });
 
 
-        // PROFIT
-        DataStream<Tuple2<TaxiRide, Double>> profit = rides
+        // PROFIT < ts, cell, profit >
+        DataStream<Tuple3<Long, String, Double>> profit = rides
                 .keyBy(
                         new KeySelector<TaxiRide, String>() {
                             @Override
@@ -64,10 +68,13 @@ public class Main {
                         Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
                 )
                 .apply(new ProfitFunction())
-                .assignTimestamps(new DropoffTS.forTupleofTaxiRide());
+                // I think I have to implement a TimestampExtractor and
+                // not an ascending one, because, after a keyBy, I do
+                // not have any guarantee ef the ordering
+                .assignTimestamps(new WindowEndTS<Tuple3<Long, String, Double>>());
 
-        // EMPTY TAXIS
-        DataStream<Tuple2<TaxiRide, Integer>> emptyTaxis = rides
+        // EMPTY TAXIS < ts, cell, count >
+        DataStream<Tuple3<Long, String, Integer>> emptyTaxis = rides
                 .keyBy(
                         new KeySelector<TaxiRide, String>() {
                             @Override
@@ -80,32 +87,28 @@ public class Main {
                         Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
                 )
                 .apply(new EmptyTaxiFunction())
-                .assignTimestamps(new DropoffTS.forTupleofTaxiRide())
-                .keyBy(
-                        new KeySelector<Tuple2<TaxiRide, Integer>, String>() {
-                            @Override
-                            public String getKey(Tuple2<TaxiRide, Integer> value) throws Exception {
-                                return value.f0.dropoffCell;
-                            }
-                        })
-                .timeWindow(
-                        Time.of(EMPTY_TAXIS_WINDOW_IN_MINUTES, TimeUnit.MINUTES),
-                        Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)
-                )
+                // < windowEnd, taxiID, cell >
+                .assignTimestamps(new WindowEndTS<Tuple3<Long, String, String>>())
+                .keyBy(new KeySelector<Tuple3<Long, String, String>, String>() {
+                    @Override
+                    public String getKey(Tuple3<Long, String, String> value) throws Exception {
+                        return value.f2;
+                    }
+                })
+                // tumbling window of window granularity
+                // in order to keep the results of only one window at a time
+                .timeWindow(Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS))
                 .apply(new EmptyTaxisCounter())
-                .assignTimestamps(new DropoffTS.forTupleofTaxiRide());
+                .assignTimestamps(new WindowEndTS<Tuple3<Long, String, Integer>>());
 
         // PROFITABILITY
-        DataStream<Tuple2<TaxiRide, Double>> profitability = profit
+        DataStream<Tuple3<Long, String, Double>> profitability = profit
                 .join(emptyTaxis)
                 .where(new ProfitWEmptyTaxisJoiner.ProfitJoinKey())
                 .equalTo(new ProfitWEmptyTaxisJoiner.EmptyTaxisJoinKey())
-                .window(GlobalWindows.create())
-                .trigger(CountTrigger.of(2))
-                .evictor(CountEvictor.of(2))
-                .apply(new ProfitWEmptyTaxisJoiner(), profit.getType())
-                .assignTimestamps(new DropoffTS.forTupleofTaxiRide());
-
+                // tumbling window of window granularity
+                .window(TumblingTimeWindows.of(Time.of(WINDOW_GRANULARITY_IN_SECONDS, TimeUnit.SECONDS)))
+                .apply(new ProfitWEmptyTaxisJoiner(), profit.getType());
 
         // RANKING
         RankingSink rs = new RankingSink(TOP_N);

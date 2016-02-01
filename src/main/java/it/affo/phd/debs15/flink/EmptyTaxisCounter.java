@@ -1,6 +1,6 @@
 package it.affo.phd.debs15.flink;
 
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
@@ -13,26 +13,30 @@ import java.util.Set;
  */
 public class EmptyTaxisCounter implements
         WindowFunction<
-                Tuple2<TaxiRide, Integer>,
-                Tuple2<TaxiRide, Integer>,
+                Tuple3<Long, String, String>,
+                Tuple3<Long, String, Integer>,
                 String, TimeWindow> {
 
     @Override
     public void apply(
             String s, TimeWindow window,
-            Iterable<Tuple2<TaxiRide, Integer>> values,
-            Collector<Tuple2<TaxiRide, Integer>> out) throws Exception {
+            Iterable<Tuple3<Long, String, String>> values,
+            Collector<Tuple3<Long, String, Integer>> out) throws Exception {
         // removing duplicates
         Set<String> taxis = new HashSet<>();
-        TaxiRide trigger = null;
+        // checking for windowID correctness
+        long lastWID = -1L;
 
-        for (Tuple2<TaxiRide, Integer> t : values) {
-            taxis.add(t.f0.taxiID);
-            trigger = t.f0;
+        for (Tuple3<Long, String, String> t : values) {
+            taxis.add(t.f1);
+
+            if (lastWID != -1L && t.f0 != lastWID) {
+                throw new RuntimeException("Wrong windowID in this window: " + t.f0 + " != " + lastWID);
+            }
+
+            lastWID = t.f0;
         }
 
-        if (trigger != null) {
-            out.collect(new Tuple2<>(trigger, taxis.size()));
-        }
+        out.collect(new Tuple3<>(window.getEnd(), s, taxis.size()));
     }
 }

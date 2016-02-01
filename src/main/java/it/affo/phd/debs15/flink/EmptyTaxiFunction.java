@@ -1,6 +1,6 @@
 package it.affo.phd.debs15.flink;
 
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
@@ -11,7 +11,7 @@ import org.apache.flink.util.Collector;
 public class EmptyTaxiFunction implements
         WindowFunction<
                 TaxiRide,
-                Tuple2<TaxiRide, Integer>,
+                Tuple3<Long, String, String>,
                 String,
                 TimeWindow> {
 
@@ -20,12 +20,14 @@ public class EmptyTaxiFunction implements
             String s,
             TimeWindow window,
             Iterable<TaxiRide> values,
-            Collector<Tuple2<TaxiRide, Integer>> out) throws Exception {
+            Collector<Tuple3<Long, String, String>> out) throws Exception {
         TaxiRide lastone = null;
         for (TaxiRide tr : values) {
             lastone = tr;
         }
 
-        out.collect(new Tuple2<>(lastone, 1));
+        if (lastone != null) {
+            out.collect(new Tuple3<>(window.getEnd(), s, lastone.dropoffCell));
+        }
     }
 }

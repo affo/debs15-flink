@@ -2,7 +2,7 @@ package it.affo.phd.debs15.flink;
 
 import org.apache.flink.api.common.functions.FlatJoinFunction;
 import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.Collector;
 
 /**
@@ -10,43 +10,39 @@ import org.apache.flink.util.Collector;
  */
 public class ProfitWEmptyTaxisJoiner implements
         FlatJoinFunction<
-                Tuple2<TaxiRide, Double>,
-                Tuple2<TaxiRide, Integer>,
-                Tuple2<TaxiRide, Double>> {
+                Tuple3<Long, String, Double>,
+                Tuple3<Long, String, Integer>,
+                Tuple3<Long, String, Double>> {
 
     @Override
     public void join(
-            Tuple2<TaxiRide, Double> first,
-            Tuple2<TaxiRide, Integer> second,
-            Collector<Tuple2<TaxiRide, Double>> out) throws Exception {
-        if (second.f1 == 0) {
+            Tuple3<Long, String, Double> first,
+            Tuple3<Long, String, Integer> second,
+            Collector<Tuple3<Long, String, Double>> out) throws Exception {
+        if (!first.f0.equals(second.f0)) {
+            throw new RuntimeException("Mismatching window IDs: " + first.f0 + " != " + second.f0);
+        }
+
+        if (second.f2 == 0) {
             return;
         }
 
-        double profitability = first.f1 / second.f1;
+        double profitability = first.f2 / second.f2;
 
-        //TaxiRide trigger = first.f0.dropoffTS.getTime() > second.f0.dropoffTS.getTime() ?
-        //      first.f0 : second.f0;
-
-        // We decide that the trigger is always the second one.
-        // This will impact the cell output in rankings
-        TaxiRide trigger = second.f0;
-        out.collect(new Tuple2<>(trigger, profitability));
+        out.collect(new Tuple3<>(first.f0, first.f1, profitability));
     }
 
-    public static class ProfitJoinKey implements KeySelector<Tuple2<TaxiRide, Double>, String> {
+    public static class ProfitJoinKey implements KeySelector<Tuple3<Long, String, Double>, String> {
         @Override
-        public String getKey(Tuple2<TaxiRide, Double> value) throws Exception {
-            TaxiRide tr = value.f0;
-            return tr.pickupCell;
+        public String getKey(Tuple3<Long, String, Double> value) throws Exception {
+            return value.f1;
         }
     }
 
-    public static class EmptyTaxisJoinKey implements KeySelector<Tuple2<TaxiRide, Integer>, String> {
+    public static class EmptyTaxisJoinKey implements KeySelector<Tuple3<Long, String, Integer>, String> {
         @Override
-        public String getKey(Tuple2<TaxiRide, Integer> value) throws Exception {
-            TaxiRide tr = value.f0;
-            return tr.dropoffCell;
+        public String getKey(Tuple3<Long, String, Integer> value) throws Exception {
+            return value.f1;
         }
     }
 }
